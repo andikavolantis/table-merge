@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drag and Drop Table Builder</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            display: flex;
+            min-height: 100vh;
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 250px 300px 1fr;
+            gap: 20px;
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+            height: calc(100vh - 40px);
+        }
+
+        .panel {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        /* Data source panel */
+        .data-item {
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .data-table {
+            background-color: #f8fafc;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border-left: 3px solid #4299e1;
+            transition: all 0.2s;
+        }
+
+        .data-table:hover {
+            background-color: #ebf4ff;
+        }
+
+        .table-name {
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #3182ce;
+        }
+
+        .toggle-icon {
+            font-size: 16px;
+            color: #718096;
+        }
+
+        .columns-container {
+            margin-top: 8px;
+            padding-left: 8px;
+            display: none;
+        }
+
+        .column-item {
+            background-color: #e6fffa;
+            padding: 8px 12px;
+            margin: 6px 0;
+            border-radius: 4px;
+            cursor: grab;
+            font-size: 14px;
+            transition: all 0.2s;
+            border-left: 3px solid #38b2ac;
+            color: #2c7a7b;
+        }
+
+        .column-item:hover {
+            background-color: #b2f5ea;
+        }
+
+        .column-item.dragging {
+            opacity: 0.5;
+        }
+
+        /* Config panel */
+        .config-area {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .drop-zone {
+            background-color: #f7fafc;
+            border: 2px dashed #cbd5e0;
+            border-radius: 6px;
+            padding: 16px;
+            min-height: 80px;
+            transition: all 0.2s;
+        }
+
+        .drop-zone-title {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .drop-zone.drag-over {
+            background-color: #e6fffa;
+            border-color: #38b2ac;
+        }
+
+        .drop-item {
+            background-color: #e6fffa;
+            padding: 6px 12px;
+            margin: 6px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #38b2ac;
+            color: #2c7a7b;
+        }
+
+        .remove-btn {
+            border: none;
+            background: none;
+            color: #e53e3e;
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.7;
+        }
+
+        .remove-btn:hover {
+            opacity: 1;
+        }
+
+        /* Table render panel */
+        .render-area {
+            padding: 20px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            background-color: white;
+        }
+
+        .rendered-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .rendered-table th, .rendered-table td {
+            border: 1px solid #e2e8f0;
+            padding: 10px 15px;
+            text-align: left;
+        }
+
+        .rendered-table th {
+            background-color: #f8fafc;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .rendered-table tr:nth-child(even) {
+            background-color: #f7fafc;
+        }
+
+        .rendered-table tr:hover {
+            background-color: #edf2f7;
+        }
+
+        /* Multi-header table styling */
+        .rendered-table th.segment-x {
+            background-color: #ebf8ff;
+            color: #2b6cb0;
+        }
+
+        .rendered-table th.segment-y {
+            background-color: #e6fffa;
+            color: #2c7a7b;
+        }
+
+        .message {
+            color: #718096;
+            font-style: italic;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Column 1: Available Data -->
+        <div class="panel" id="data-panel">
+            <h2 class="panel-title">Available Data</h2>
+            <div class="data-sources">
+                <div class="data-table">
+                    <div class="table-name" onclick="toggleColumns(this)">
+                        Sales Data <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="columns-container">
+                        <div class="column-item" draggable="true" data-column="product">Product</div>
+                        <div class="column-item" draggable="true" data-column="category">Category</div>
+                        <div class="column-item" draggable="true" data-column="region">Region</div>
+                        <div class="column-item" draggable="true" data-column="sales">Sales</div>
+                        <div class="column-item" draggable="true" data-column="profit">Profit</div>
+                        <div class="column-item" draggable="true" data-column="date">Date</div>
+                    </div>
+                </div>
+
+                <div class="data-table">
+                    <div class="table-name" onclick="toggleColumns(this)">
+                        Customer Data <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="columns-container">
+                        <div class="column-item" draggable="true" data-column="customer_id">Customer ID</div>
+                        <div class="column-item" draggable="true" data-column="name">Name</div>
+                        <div class="column-item" draggable="true" data-column="gender">Gender</div>
+                        <div class="column-item" draggable="true" data-column="age">Age</div>
+                        <div class="column-item" draggable="true" data-column="city">City</div>
+                        <div class="column-item" draggable="true" data-column="purchase_count">Purchase Count</div>
+                    </div>
+                </div>
+
+                <div class="data-table">
+                    <div class="table-name" onclick="toggleColumns(this)">
+                        Inventory Data <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="columns-container">
+                        <div class="column-item" draggable="true" data-column="item_id">Item ID</div>
+                        <div class="column-item" draggable="true" data-column="item_name">Item Name</div>
+                        <div class="column-item" draggable="true" data-column="supplier">Supplier</div>
+                        <div class="column-item" draggable="true" data-column="stock">Stock</div>
+                        <div class="column-item" draggable="true" data-column="warehouse">Warehouse</div>
+                        <div class="column-item" draggable="true" data-column="price">Price</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2: Configuration Area -->
+        <div class="panel" id="config-panel">
+            <h2 class="panel-title">Table Configuration</h2>
+            <div class="config-area">
+                <div class="drop-zone" id="rows">
+                    <div class="drop-zone-title">Rows</div>
+                </div>
+                <div class="drop-zone" id="columns">
+                    <div class="drop-zone-title">Columns</div>
+                </div>
+                <div class="drop-zone" id="segment-x">
+                    <div class="drop-zone-title">Segment X</div>
+                </div>
+                <div class="drop-zone" id="segment-y">
+                    <div class="drop-zone-title">Segment Y</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Table Rendering Area -->
+        <div class="panel" id="render-panel">
+            <h2 class="panel-title">Table Preview</h2>
+            <div class="render-area">
+                <div id="table-container" class="table-container">
+                    <p class="message">Drag columns to the configuration area to build your table</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data for rendering tables
+        const sampleData = [
+            { product: 'Laptop', category: 'Electronics', region: 'North', sales: 5400, profit: 1200, date: '2023-01-15', customer_id: '001', name: 'John Smith', gender: 'Male', age: 35, city: 'New York', purchase_count: 3, item_id: 'L001', item_name: 'ThinkPad X1', supplier: 'Lenovo', stock: 42, warehouse: 'East', price: 1299 },
+            { product: 'Smartphone', category: 'Electronics', region: 'South', sales: 8200, profit: 2100, date: '2023-01-20', customer_id: '002', name: 'Alice Johnson', gender: 'Female', age: 28, city: 'Miami', purchase_count: 5, item_id: 'S001', item_name: 'Galaxy S23', supplier: 'Samsung', stock: 78, warehouse: 'South', price: 999 },
+            { product: 'Desk Chair', category: 'Furniture', region: 'East', sales: 1500, profit: 450, date: '2023-02-05', customer_id: '003', name: 'Robert Davis', gender: 'Male', age: 42, city: 'Boston', purchase_count: 1, item_id: 'C001', item_name: 'Ergonomic Chair', supplier: 'Herman Miller', stock: 24, warehouse: 'North', price: 549 },
+            { product: 'Coffee Maker', category: 'Appliances', region: 'West', sales: 920, profit: 310, date: '2023-02-12', customer_id: '004', name: 'Emily Wilson', gender: 'Female', age: 31, city: 'Seattle', purchase_count: 2, item_id: 'K001', item_name: 'Coffee Pro', supplier: 'Breville', stock: 36, warehouse: 'West', price: 199 },
+            { product: 'Headphones', category: 'Electronics', region: 'North', sales: 3600, profit: 1500, date: '2023-03-08', customer_id: '005', name: 'Michael Brown', gender: 'Male', age: 24, city: 'Chicago', purchase_count: 4, item_id: 'H001', item_name: 'Noise Cancelling', supplier: 'Bose', stock: 53, warehouse: 'Central', price: 349 },
+            { product: 'Tablet', category: 'Electronics', region: 'East', sales: 4100, profit: 1050, date: '2023-03-15', customer_id: '006', name: 'Jennifer Lee', gender: 'Female', age: 29, city: 'Philadelphia', purchase_count: 2, item_id: 'T001', item_name: 'iPad Pro', supplier: 'Apple', stock: 62, warehouse: 'East', price: 799 },
+            { product: 'Desk', category: 'Furniture', region: 'West', sales: 2200, profit: 750, date: '2023-04-02', customer_id: '007', name: 'David Kim', gender: 'Male', age: 38, city: 'Los Angeles', purchase_count: 1, item_id: 'D001', item_name: 'Standing Desk', supplier: 'Uplift', stock: 18, warehouse: 'West', price: 649 },
+            { product: 'Monitor', category: 'Electronics', region: 'South', sales: 6800, profit: 1850, date: '2023-04-10', customer_id: '008', name: 'Sofia Garcia', gender: 'Female', age: 33, city: 'Austin', purchase_count: 3, item_id: 'M001', item_name: 'Ultra Wide', supplier: 'LG', stock: 45, warehouse: 'Central', price: 449 }
+        ];
+
+        // Drag and drop functionality
+        let draggedItem = null;
+
+        function initDragAndDrop() {
+            const columnItems = document.querySelectorAll('.column-item');
+            const dropZones = document.querySelectorAll('.drop-zone');
+
+            columnItems.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+            });
+
+            dropZones.forEach(zone => {
+                zone.addEventListener('dragover', handleDragOver);
+                zone.addEventListener('dragenter', handleDragEnter);
+                zone.addEventListener('dragleave', handleDragLeave);
+                zone.addEventListener('drop', handleDrop);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            this.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', this.dataset.column);
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd() {
+            this.classList.remove('dragging');
+            draggedItem = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        }
+
+        function handleDragLeave() {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            
+            const columnName = e.dataTransfer.getData('text/plain');
+            const columnLabel = draggedItem.textContent;
+            const zoneId = this.id;
+            
+            // Add the dropped item to the drop zone
+            const dropItem = document.createElement('div');
+            dropItem.className = 'drop-item';
+            dropItem.dataset.column = columnName;
+            dropItem.innerHTML = `
+                ${columnLabel}
+                <button class="remove-btn" onclick="removeItem(this)">×</button>
+            `;
+            this.appendChild(dropItem);
+            
+            // Render the table based on the current configuration
+            renderTable();
+        }
+
+        function removeItem(button) {
+            const dropItem = button.parentElement;
+            dropItem.parentElement.removeChild(dropItem);
+            renderTable();
+        }
+
+        function toggleColumns(tableHeader) {
+            const columnsContainer = tableHeader.nextElementSibling;
+            const toggleIcon = tableHeader.querySelector('.toggle-icon');
+            
+            if (columnsContainer.style.display === 'block') {
+                columnsContainer.style.display = 'none';
+                toggleIcon.textContent = '▼';
+            } else {
+                columnsContainer.style.display = 'block';
+                toggleIcon.textContent = '▲';
+            }
+        }
+
+        function renderTable() {
+            const tableContainer = document.getElementById('table-container');
+            const rowsZone = document.getElementById('rows');
+            const columnsZone = document.getElementById('columns');
+            const segmentXZone = document.getElementById('segment-x');
+            const segmentYZone = document.getElementById('segment-y');
+            
+            const rowColumns = Array.from(rowsZone.querySelectorAll('.drop-item')).map(item => item.dataset.column);
+            const columnColumns = Array.from(columnsZone.querySelectorAll('.drop-item')).map(item => item.dataset.column);
+            const segmentXColumns = Array.from(segmentXZone.querySelectorAll('.drop-item')).map(item => item.dataset.column);
+            const segmentYColumns = Array.from(segmentYZone.querySelectorAll('.drop-item')).map(item => item.dataset.column);
+            
+            // If no configuration, show message
+            if (rowColumns.length === 0 || columnColumns.length === 0) {
+                tableContainer.innerHTML = '<p class="message">Drag columns to the configuration area to build your table</p>';
+                return;
+            }
+
+            // Generate the table based on the configuration
+            if (segmentXColumns.length === 0 && segmentYColumns.length === 0) {
+                // Simple table (rows and columns only)
+                renderSimpleTable(rowColumns, columnColumns);
+            } else if (segmentXColumns.length > 0 && segmentYColumns.length === 0) {
+                // Multi-header table with segment X
+                renderSegmentXTable(rowColumns, columnColumns, segmentXColumns);
+            } else if (segmentXColumns.length === 0 && segmentYColumns.length > 0) {
+                // Multi-row table with segment Y
+                renderSegmentYTable(rowColumns, columnColumns, segmentYColumns);
+            } else {
+                // Complex table with both segment X and Y
+                renderComplexTable(rowColumns, columnColumns, segmentXColumns, segmentYColumns);
+            }
+        }
+
+        function renderSimpleTable(rowColumns, columnColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const groupedData = groupData(sampleData, rowColumns);
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header row
+            tableHtml += '<thead><tr>';
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            columnColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            tableHtml += '</tr></thead>';
+            
+            // Table body
+            tableHtml += '<tbody>';
+            
+            // Process rows for merging
+            const rows = Object.values(groupedData);
+            const processedRows = [];
+            
+            // Prepare data for cell merging
+            for (let i = 0; i < rows.length; i++) {
+                const item = rows[i][0];
+                const rowData = [];
+                
+                // Add row columns
+                rowColumns.forEach(col => rowData.push({ 
+                    value: item[col],
+                    column: col,
+                    type: 'row'
+                }));
+                
+                // Add data columns
+                columnColumns.forEach(col => rowData.push({ 
+                    value: item[col],
+                    column: col,
+                    type: 'data'
+                }));
+                
+                processedRows.push(rowData);
+            }
+            
+            // Render table with merged cells
+            for (let i = 0; i < processedRows.length; i++) {
+                tableHtml += '<tr>';
+                
+                for (let j = 0; j < processedRows[i].length; j++) {
+                    const cell = processedRows[i][j];
+                    
+                    // Check if this cell should be merged vertically
+                    if (i > 0 && j < rowColumns.length && 
+                        processedRows[i][j].value === processedRows[i-1][j].value) {
+                        // Skip this cell as it will be covered by rowspan from a previous row
+                        continue;
+                    }
+                    
+                    // Calculate rowspan (how many rows down have the same value)
+                    let rowspan = 1;
+                    if (j < rowColumns.length) {
+                        for (let r = i + 1; r < processedRows.length; r++) {
+                            if (processedRows[r][j].value === cell.value) {
+                                rowspan++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    const cellType = cell.type === 'row' ? 'th' : 'td';
+                    if (rowspan > 1) {
+                        tableHtml += `<${cellType} rowspan="${rowspan}">${cell.value}</${cellType}>`;
+                    } else {
+                        tableHtml += `<${cellType}>${cell.value}</${cellType}>`;
+                    }
+                }
+                
+                tableHtml += '</tr>';
+            }
+            
+            tableHtml += '</tbody></table>';
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function renderSegmentXTable(rowColumns, columnColumns, segmentXColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const rowGroupedData = groupData(sampleData, rowColumns);
+            
+            // Get unique values for segment X columns
+            const segmentXValues = {};
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol] = [...new Set(sampleData.map(item => item[segXCol]))];
+            });
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header rows
+            tableHtml += '<thead>';
+            
+            // First header row with segment X columns
+            tableHtml += '<tr>';
+            // Empty cells for row columns
+            rowColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Segment X columns with merged headers
+            segmentXColumns.forEach(segXCol => {
+                const colspan = columnColumns.length * segmentXValues[segXCol].length;
+                tableHtml += `<th colspan="${colspan}" class="segment-x">${getColumnDisplayName(segXCol)}</th>`;
+            });
+            tableHtml += '</tr>';
+            
+            // Second header row with segment X values
+            tableHtml += '<tr>';
+            // Row column headers
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // For each segment X column - merge consecutive identical values
+            segmentXColumns.forEach(segXCol => {
+                const values = segmentXValues[segXCol];
+                
+                values.forEach(value => {
+                    // For each value, all data columns get a header
+                    let headerAdded = false;
+                    
+                    columnColumns.forEach((col, colIndex) => {
+                        if (colIndex === 0 || headerAdded === false) {
+                            // For first column of each segment value, add the segment value
+                            tableHtml += `<th class="segment-x" colspan="${columnColumns.length}">
+                                ${value}
+                            </th>`;
+                            headerAdded = true;
+                        }
+                    });
+                });
+            });
+            tableHtml += '</tr>';
+            
+            // Third header row with actual column names
+            tableHtml += '<tr>';
+            // Row column headers - repeated
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // Column headers for each segment X value
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol].forEach(value => {
+                    columnColumns.forEach(col => {
+                        tableHtml += `<th class="segment-x">${getColumnDisplayName(col)}</th>`;
+                    });
+                });
+            });
+            tableHtml += '</tr>';
+            tableHtml += '</thead>';
+            
+            // Table body with merged rows
+            tableHtml += '<tbody>';
+            
+            // Process rows for merging
+            const rows = Object.values(rowGroupedData);
+            let lastRowValues = {};
+            
+            rows.forEach((group, rowIndex) => {
+                const mainItem = group[0];
+                tableHtml += '<tr>';
+                
+                // Row column values with potential rowspan
+                rowColumns.forEach((col, colIndex) => {
+                    const value = mainItem[col];
+                    const key = `row_${colIndex}`;
+                    
+                    // Check if this value is the same as previous row and should be merged
+                    if (rowIndex > 0 && value === lastRowValues[key]) {
+                        // Skip this cell as it will be covered by rowspan from previous row
+                    } else {
+                        // Count how many following rows have the same value
+                        let rowspan = 1;
+                        for (let r = rowIndex + 1; r < rows.length; r++) {
+                            if (rows[r][0][col] === value) {
+                                rowspan++;
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        if (rowspan > 1) {
+                            tableHtml += `<td rowspan="${rowspan}">${value}</td>`;
+                        } else {
+                            tableHtml += `<td>${value}</td>`;
+                        }
+                        
+                        // Update last row values for next iteration
+                        lastRowValues[key] = value;
+                    }
+                });
+                
+                // For each segment X column
+                segmentXColumns.forEach(segXCol => {
+                    segmentXValues[segXCol].forEach(value => {
+                        // Get items that match this segment value
+                        const filteredItems = group.filter(item => item[segXCol] === value);
+                        const displayItem = filteredItems.length > 0 ? filteredItems[0] : null;
+                        
+                        // For each data column
+                        columnColumns.forEach(col => {
+                            tableHtml += `<td>${displayItem ? displayItem[col] : '-'}</td>`;
+                        });
+                    });
+                });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+            
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function renderSegmentYTable(rowColumns, columnColumns, segmentYColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const rowGroupedData = groupData(sampleData, rowColumns);
+            
+            // Get unique values for segment Y columns
+            const segmentYValues = {};
+            segmentYColumns.forEach(segYCol => {
+                segmentYValues[segYCol] = [...new Set(sampleData.map(item => item[segYCol]))];
+            });
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header row
+            tableHtml += '<thead><tr>';
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // Segment Y column name
+            segmentYColumns.forEach(segYCol => {
+                tableHtml += `<th class="segment-y">${getColumnDisplayName(segYCol)}</th>`;
+            });
+            
+            columnColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            tableHtml += '</tr></thead>';
+            
+            // Table body with merged cells
+            tableHtml += '<tbody>';
+            
+            // Keep track of previous row values for merging
+            let prevRowValues = {};
+            let rowspans = {};
+            
+            Object.values(rowGroupedData).forEach((group, groupIndex) => {
+                const mainItem = group[0];
+                let firstRow = true;
+                
+                // For each segment Y value
+                segmentYColumns.forEach(segYCol => {
+                    segmentYValues[segYCol].forEach((value, valueIndex) => {
+                        tableHtml += '<tr>';
+                        
+                        // Row column values with potential rowspan
+                        rowColumns.forEach((col, colIndex) => {
+                            const cellValue = mainItem[col];
+                            const cellKey = `${groupIndex}_${colIndex}`;
+                            
+                            // Only show row values on first iteration of segment Y
+                            if (firstRow) {
+                                tableHtml += `<td rowspan="${segmentYValues[segYCol].length}">${cellValue}</td>`;
+                            }
+                        });
+                        
+                        // Reset firstRow after processing row columns
+                        firstRow = false;
+                        
+                        // Segment Y value
+                        tableHtml += `<td class="segment-y">${value}</td>`;
+                        
+                        // Column values for this segment
+                        const segmentItems = group.filter(item => item[segYCol] === value);
+                        const displayItem = segmentItems.length > 0 ? segmentItems[0] : null;
+                        
+                        columnColumns.forEach(col => {
+                            tableHtml += `<td>${displayItem ? displayItem[col] : '-'}</td>`;
+                        });
+                        
+                        tableHtml += '</tr>';
+                    });
+                    
+                    // Reset firstRow for next segment Y column
+                    firstRow = true;
+                });
+            });
+            tableHtml += '</tbody></table>';
+            
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function renderComplexTable(rowColumns, columnColumns, segmentXColumns, segmentYColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const rowGroupedData = groupData(sampleData, rowColumns);
+            
+            // Get unique values for segment X and Y columns
+            const segmentXValues = {};
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol] = [...new Set(sampleData.map(item => item[segXCol]))];
+            });
+            
+            const segmentYValues = {};
+            segmentYColumns.forEach(segYCol => {
+                segmentYValues[segYCol] = [...new Set(sampleData.map(item => item[segYCol]))];
+            });
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header rows
+            tableHtml += '<thead>';
+            
+            // First header row with segment X columns - merged for each segment
+            tableHtml += '<tr>';
+            // Empty cells for row columns and segment Y columns
+            rowColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            segmentYColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Segment X columns with merged headers
+            segmentXColumns.forEach(segXCol => {
+                const colspan = columnColumns.length * segmentXValues[segXCol].length;
+                tableHtml += `<th colspan="${colspan}" class="segment-x">${getColumnDisplayName(segXCol)}</th>`;
+            });
+            tableHtml += '</tr>';
+            
+            // Second header row with segment X values - merged for consecutive identical values
+            tableHtml += '<tr>';
+            // Row column headers
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // Segment Y column headers
+            segmentYColumns.forEach(segYCol => {
+                tableHtml += `<th class="segment-y">${getColumnDisplayName(segYCol)}</th>`;
+            });
+            
+            // For each segment X column - merge identical consecutive values
+            segmentXColumns.forEach(segXCol => {
+                const values = segmentXValues[segXCol];
+                
+                values.forEach(value => {
+                    tableHtml += `<th colspan="${columnColumns.length}" class="segment-x">${value}</th>`;
+                });
+            });
+            tableHtml += '</tr>';
+            
+            // Third row with column names
+            tableHtml += '<tr>';
+            // Row column headers again (blank)
+            rowColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Segment Y column headers (blank)
+            segmentYColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Column headers repeated for each segment X value
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol].forEach(() => {
+                    columnColumns.forEach(col => {
+                        tableHtml += `<th class="segment-x">${getColumnDisplayName(col)}</th>`;
+                    });
+                });
+            });
+            tableHtml += '</tr>';
+            tableHtml += '</thead>';
+            
+            // Table body with merged cells
+            tableHtml += '<tbody>';
+            
+            // Keep track of row values for merging
+            let prevGroupValues = {};
+            let rowspanCounts = {};
+            
+            Object.values(rowGroupedData).forEach((group, groupIndex) => {
+                const mainItem = group[0];
+                
+                // For each segment Y column and value
+                let firstRowInGroup = true;
+                let rowsInThisGroup = 0;
+                
+                // Calculate how many rows this group will have
+                segmentYColumns.forEach(segYCol => {
+                    rowsInThisGroup += segmentYValues[segYCol].length;
+                });
+                
+                segmentYColumns.forEach(segYCol => {
+                    segmentYValues[segYCol].forEach(yValue => {
+                        tableHtml += '<tr>';
+                        
+                        // Row column values - only on first row of each group
+                        if (firstRowInGroup) {
+                            rowColumns.forEach((col, colIndex) => {
+                                const value = mainItem[col];
+                                
+                                // Check for consecutive groups with same value
+                                if (groupIndex > 0 && prevGroupValues[colIndex] === value && rowspanCounts[colIndex] > 0) {
+                                    // Increment existing rowspan
+                                    rowspanCounts[colIndex] += rowsInThisGroup;
+                                } else {
+                                    // New rowspan
+                                    tableHtml += `<td rowspan="${rowsInThisGroup}">${value}</td>`;
+                                    prevGroupValues[colIndex] = value;
+                                    rowspanCounts[colIndex] = rowsInThisGroup;
+                                }
+                            });
+                        }
+                        
+                        // Segment Y value
+                        tableHtml += `<td class="segment-y">${yValue}</td>`;
+                        
+                        // For each segment X value
+                        segmentXColumns.forEach(segXCol => {
+                            segmentXValues[segXCol].forEach(xValue => {
+                                // Find items that match both segment X and Y values
+                                const filteredItems = group.filter(
+                                    item => item[segXCol] === xValue && item[segYCol] === yValue
+                                );
+                                const displayItem = filteredItems.length > 0 ? filteredItems[0] : null;
+                                
+                                // For each column
+                                columnColumns.forEach(col => {
+                                    tableHtml += `<td>${displayItem ? displayItem[col] : '-'}</td>`;
+                                });
+                            });
+                        });
+                        
+                        tableHtml += '</tr>';
+                        firstRowInGroup = false;
+                    });
+                });
+            });
+            tableHtml += '</tbody></table>';
+            
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function renderSegmentYTable(rowColumns, columnColumns, segmentYColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const rowGroupedData = groupData(sampleData, rowColumns);
+            
+            // Get unique values for segment Y columns
+            const segmentYValues = {};
+            segmentYColumns.forEach(segYCol => {
+                segmentYValues[segYCol] = [...new Set(sampleData.map(item => item[segYCol]))];
+            });
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header row
+            tableHtml += '<thead><tr>';
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // Segment Y column name
+            segmentYColumns.forEach(segYCol => {
+                tableHtml += `<th class="segment-y">${getColumnDisplayName(segYCol)}</th>`;
+            });
+            
+            columnColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            tableHtml += '</tr></thead>';
+            
+            // Table body with merged cells
+            tableHtml += '<tbody>';
+            
+            // Keep track of previous row values for merging
+            let prevRowValues = {};
+            let rowspans = {};
+            
+            Object.values(rowGroupedData).forEach((group, groupIndex) => {
+                const mainItem = group[0];
+                let firstRow = true;
+                
+                // For each segment Y value
+                segmentYColumns.forEach(segYCol => {
+                    segmentYValues[segYCol].forEach((value, valueIndex) => {
+                        tableHtml += '<tr>';
+                        
+                        // Row column values with potential rowspan
+                        rowColumns.forEach((col, colIndex) => {
+                            const cellValue = mainItem[col];
+                            const cellKey = `${groupIndex}_${colIndex}`;
+                            
+                            // Only show row values on first iteration of segment Y
+                            if (firstRow) {
+                                tableHtml += `<td rowspan="${segmentYValues[segYCol].length}">${cellValue}</td>`;
+                            }
+                        });
+                        
+                        // Reset firstRow after processing row columns
+                        firstRow = false;
+                        
+                        // Segment Y value
+                        tableHtml += `<td class="segment-y">${value}</td>`;
+                        
+                        // Column values for this segment
+                        const segmentItems = group.filter(item => item[segYCol] === value);
+                        const displayItem = segmentItems.length > 0 ? segmentItems[0] : null;
+                        
+                        columnColumns.forEach(col => {
+                            tableHtml += `<td>${displayItem ? displayItem[col] : '-'}</td>`;
+                        });
+                        
+                        tableHtml += '</tr>';
+                    });
+                    
+                    // Reset firstRow for next segment Y column
+                    firstRow = true;
+                });
+            });
+            tableHtml += '</tbody></table>';
+            
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function renderComplexTable(rowColumns, columnColumns, segmentXColumns, segmentYColumns) {
+            const tableContainer = document.getElementById('table-container');
+            
+            // Group data by row columns
+            const rowGroupedData = groupData(sampleData, rowColumns);
+            
+            // Get unique values for segment X and Y columns
+            const segmentXValues = {};
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol] = [...new Set(sampleData.map(item => item[segXCol]))];
+            });
+            
+            const segmentYValues = {};
+            segmentYColumns.forEach(segYCol => {
+                segmentYValues[segYCol] = [...new Set(sampleData.map(item => item[segYCol]))];
+            });
+            
+            // Create HTML table
+            let tableHtml = '<table class="rendered-table">';
+            
+            // Header rows
+            tableHtml += '<thead>';
+            
+            // First header row with segment X columns - merged for each segment
+            tableHtml += '<tr>';
+            // Empty cells for row columns and segment Y columns
+            rowColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            segmentYColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Segment X columns with merged headers
+            segmentXColumns.forEach(segXCol => {
+                const colspan = columnColumns.length * segmentXValues[segXCol].length;
+                tableHtml += `<th colspan="${colspan}" class="segment-x">${getColumnDisplayName(segXCol)}</th>`;
+            });
+            tableHtml += '</tr>';
+            
+            // Second header row with segment X values - merged for consecutive identical values
+            tableHtml += '<tr>';
+            // Row column headers
+            rowColumns.forEach(col => {
+                tableHtml += `<th>${getColumnDisplayName(col)}</th>`;
+            });
+            
+            // Segment Y column headers
+            segmentYColumns.forEach(segYCol => {
+                tableHtml += `<th class="segment-y">${getColumnDisplayName(segYCol)}</th>`;
+            });
+            
+            // For each segment X column - merge identical consecutive values
+            segmentXColumns.forEach(segXCol => {
+                const values = segmentXValues[segXCol];
+                
+                values.forEach(value => {
+                    tableHtml += `<th colspan="${columnColumns.length}" class="segment-x">${value}</th>`;
+                });
+            });
+            tableHtml += '</tr>';
+            
+            // Third row with column names
+            tableHtml += '<tr>';
+            // Row column headers again (blank)
+            rowColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Segment Y column headers (blank)
+            segmentYColumns.forEach(() => {
+                tableHtml += '<th></th>';
+            });
+            
+            // Column headers repeated for each segment X value
+            segmentXColumns.forEach(segXCol => {
+                segmentXValues[segXCol].forEach(() => {
+                    columnColumns.forEach(col => {
+                        tableHtml += `<th class="segment-x">${getColumnDisplayName(col)}</th>`;
+                    });
+                });
+            });
+            tableHtml += '</tr>';
+            tableHtml += '</thead>';
+            
+            // Table body with merged cells
+            tableHtml += '<tbody>';
+            
+            // Keep track of row values for merging
+            let prevGroupValues = {};
+            let rowspanCounts = {};
+            
+            Object.values(rowGroupedData).forEach((group, groupIndex) => {
+                const mainItem = group[0];
+                
+                // For each segment Y column and value
+                let firstRowInGroup = true;
+                let rowsInThisGroup = 0;
+                
+                // Calculate how many rows this group will have
+                segmentYColumns.forEach(segYCol => {
+                    rowsInThisGroup += segmentYValues[segYCol].length;
+                });
+                
+                segmentYColumns.forEach(segYCol => {
+                    segmentYValues[segYCol].forEach(yValue => {
+                        tableHtml += '<tr>';
+                        
+                        // Row column values - only on first row of each group
+                        if (firstRowInGroup) {
+                            rowColumns.forEach((col, colIndex) => {
+                                const value = mainItem[col];
+                                
+                                // Check for consecutive groups with same value
+                                if (groupIndex > 0 && prevGroupValues[colIndex] === value && rowspanCounts[colIndex] > 0) {
+                                    // Increment existing rowspan
+                                    rowspanCounts[colIndex] += rowsInThisGroup;
+                                } else {
+                                    // New rowspan
+                                    tableHtml += `<td rowspan="${rowsInThisGroup}">${value}</td>`;
+                                    prevGroupValues[colIndex] = value;
+                                    rowspanCounts[colIndex] = rowsInThisGroup;
+                                }
+                            });
+                        }
+                        
+                        // Segment Y value
+                        tableHtml += `<td class="segment-y">${yValue}</td>`;
+                        
+                        // For each segment X value
+                        segmentXColumns.forEach(segXCol => {
+                            segmentXValues[segXCol].forEach(xValue => {
+                                // Find items that match both segment X and Y values
+                                const filteredItems = group.filter(
+                                    item => item[segXCol] === xValue && item[segYCol] === yValue
+                                );
+                                const displayItem = filteredItems.length > 0 ? filteredItems[0] : null;
+                                
+                                // For each column
+                                columnColumns.forEach(col => {
+                                    tableHtml += `<td>${displayItem ? displayItem[col] : '-'}</td>`;
+                                });
+                            });
+                        });
+                        
+                        tableHtml += '</tr>';
+                        firstRowInGroup = false;
+                    });
+                });
+            });
+            tableHtml += '</tbody></table>';
+            
+            tableContainer.innerHTML = tableHtml;
+        }
+
+        function groupData(data, columns) {
+            const result = {};
+            
+            data.forEach(item => {
+                // Create a key based on the specified columns
+                const key = columns.map(col => item[col]).join('|');
+                
+                if (!result[key]) {
+                    result[key] = [];
+                }
+                
+                result[key].push(item);
+            });
+            
+            return result;
+        }
+
+        function getColumnDisplayName(column) {
+            // Convert camelCase or snake_case to Title Case with spaces
+            return column
+                .replace(/_/g, ' ')
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .trim();
+        }
+
+        // Initialize drag and drop functionality when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initDragAndDrop();
+        });
+    </script>
+</body>
+</html>
